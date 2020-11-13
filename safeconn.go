@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	timeoutDuration = 10 * time.Millisecond
+	defaultReadTimeout = 10 * time.Millisecond
+	defaultConnTimeout = 5 * time.Second
 )
 
 // SafeConn is an implementation of the io.WriteCloser that wraps a net.Conn type
@@ -18,20 +19,28 @@ const (
 // continues to retry for up to 15 minutes before determining that the connection has
 // been broken off.
 type SafeConn struct {
-	netConn net.Conn
+	netConn     net.Conn
+	connTimeout time.Duration
+	readTimeout time.Duration
 }
 
-func NewSafeConn(network string, address string) (*SafeConn, error) {
-	newConn, err := dialTimeout(network, address, 5*time.Second)
+func NewSafeConn(network, address string, connTimeout, readTimeout time.Duration) (*SafeConn, error) {
+	newConn, err := dialTimeout(network, address, connTimeout)
 	if err != nil {
 		return nil, err
 	}
 
 	c := &SafeConn{
-		netConn: newConn,
+		netConn:     newConn,
+		connTimeout: connTimeout,
+		readTimeout: readTimeout,
 	}
 
 	return c, nil
+}
+
+func NewSafeConnWithDefaultTimeouts(network string, address string) (*SafeConn, error) {
+	return NewSafeConn(network, address, defaultConnTimeout, defaultReadTimeout)
 }
 
 func (s *SafeConn) Write(p []byte) (n int, err error) {
@@ -48,7 +57,7 @@ func (s *SafeConn) Close() error {
 }
 
 func (s *SafeConn) connIsClosed() bool {
-	err := s.netConn.SetReadDeadline(time.Now().Add(timeoutDuration))
+	err := s.netConn.SetReadDeadline(time.Now().Add(s.readTimeout))
 	if err != nil {
 		return true
 	}
